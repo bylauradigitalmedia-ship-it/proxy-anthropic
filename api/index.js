@@ -8,7 +8,7 @@ const DBS = {
   christina: "38eb48c9-bb6f-80c9-85db-e83ef586107e"
 };
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -91,4 +91,4 @@ export default async function handler(req, res) {
   }
 
   return res.status(404).json({ error: "Route inconnue" });
-}
+};
