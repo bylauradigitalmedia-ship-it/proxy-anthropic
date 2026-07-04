@@ -1,10 +1,5 @@
 	
-version	2
-builds	
+rewrites	
 0	
-src	"server.js"
-use	"@vercel/node"
-routes	
-0	
-src	"/(.*)"
-dest	"server.js"
+source	"/(.*)"
+destination	"/api/index"
