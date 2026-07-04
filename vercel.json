@@ -1,5 +1,1 @@
-	
-rewrites	
-0	
-source	"/(.*)"
-destination	"/api/index"
+{"rewrites":[{"source":"/(.*)","destination":"/api/index"}]}
