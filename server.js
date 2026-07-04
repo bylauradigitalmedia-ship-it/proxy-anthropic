@@ -16,10 +16,10 @@ const NOTION_DBS = {
   "Christina Ferrandi — Psychogénéalogie": "38eb48c9-bb6f-80c9-85db-e83ef586107e",
 };
 
-// Génération d'itinéraire IA
+app.get("/", (req, res) => res.send("Proxy Anthropic + Notion OK ✓"));
+
 app.post("/generate", async (req, res) => {
   if (!API_KEY) return res.status(500).json({ error: "Clé API Anthropic non configurée." });
-
   const { compte, sujet, format, objectif, tonne, détails } = req.body;
   if (!sujet || !compte) return res.status(400).json({ error: "Paramètres manquants." });
 
@@ -34,7 +34,6 @@ MISSION EN 2 ÉTAPES :
 - Les mises à jour récentes de l'algorithme Instagram 2026
 
 ÉTAPE 2 — Génère un post Instagram ultra-optimisé :
-
 Activité / compte : ${compte}
 Sujet : ${sujet}
 Format : ${format}
@@ -44,7 +43,7 @@ ${détails ? "Détails : " + détails : ""}
 
 RÈGLES D'OR ALGORITHME 2026 :
 - Crochet : les 3 premiers mots doivent stopper le scroll
-- SEO : intégrer des mots-clés naturellement (Instagram indexe le texte)
+- SEO : intégrer des mots-clés naturellement
 - Angle sauvegarde : contenu si utile qu'on le garde
 - CTA émotionnels et spécifiques
 - Premier commentaire stratégique dans les 10 min
@@ -82,45 +81,27 @@ Répond UNIQUEMENT avec un objet JSON valide, sans backticks :
         messages: [{ role: "utilisateur", content: invite }],
       }),
     });
-
     const data = await response.json();
     if (data.type === "error") return res.status(500).json({ error: data.error.message });
-
     const raw = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
     const start = raw.indexOf("{");
     const end = raw.lastIndexOf("}");
     if (start === -1) return res.status(500).json({ error: "Réponse inattendue.", raw });
-
     res.json(JSON.parse(raw.slice(start, end + 1)));
   } attraper (erreur) {
     res.status(500).json({ erreur : "Erreur serveur : " + err.message });
   }
 });
 
-// Notion d'ajout d'itinéraire
 app.post("/notion-add", async (req, res) => {
   if (!NOTION_TOKEN) return res.status(500).json({ error: "Token Notion non configuré." });
-
   const { compte_label, sujet, format, date, heure, hook, legende, hashtags, premier_commentaire, story_relance, conseil_visuel } = req.body;
-
   const dbId = NOTION_DBS[compte_label];
   if (!dbId) return res.status(400).json({ error: "Client non reconnu : " + compte_label });
 
-  // Construire le contenu complet
   const hashtagsStr = (hashtags || []).map(h => "#" + h.replace(/^#/, "")).join(" ");
-  const contenuComplet = `${hook}\n\n${legende}\n\n${hashtagsStr}`;
-
-  // Déterminer le statut et le type de contenu pour Notion
-  const formatMap = {
-    "carrousel" : "Carrousel",
-    "bobine" : "Bobine",
-    "photo": "Photo",
-    "histoire" : "Histoire",
-    "citation": "Citation"
-  };
 
   essayer {
-    // D'abord on récupère le schéma de la base de données pour connaître les propriétés
     const schemaRes = await fetch(`https://api.notion.com/v1/databases/${dbId}`, {
       en-têtes : {
         "Autorisation" : "Porteur" + NOTION_TOKEN,
@@ -128,48 +109,37 @@ app.post("/notion-add", async (req, res) => {
       }
     });
     const schema = await schemaRes.json();
+    if (schema.object === "error") return res.status(400).json({ error: "Erreur Notion : " + schema.message });
 
-    si (schéma.objet === "erreur") {
-      return res.status(400).json({ error: "Erreur Notion : " + schema.message + ". Vérifie que l'intégration est bien connectée à cette page." });
-    }
-
-    // Construire les propriétés selon ce qui existent dans la base de données
     const props = schema.properties || {};
     const pageProps = {};
 
-    // Titre (Name ou Titre ou Sujet)
     const titleProp = Object.keys(props).find(k => props[k].type === "title");
     if (titleProp) pageProps[titleProp] = { title: [{ text: { content: sujet || "Publier sur Instagram" } }] };
 
-    // Date
     const dateProp = Object.keys(props).find(k => props[k].type === "date");
     if (dateProp && date) pageProps[dateProp] = { date: { start: date + (heure ? "T" + heure + ":00" : "") } };
 
-    // Sélection / Statut pour le format
     const selectProps = Object.keys(props).filter(k => props[k].type === "select");
     pour (const sp de selectProps) {
-      const spLower = sp.toLowerCase();
-      si (spLower.includes("format") || spLower.includes("type")) {
-        pageProps[sp] = { select: { name: formatMap[format] || format } };
+      si (sp.toLowerCase().includes("format") || sp.toLowerCase().includes("type")) {
+        pageProps[sp] = { select: { name: format.charAt(0).toUpperCase() + format.slice(1) } };
         casser;
       }
     }
 
-    // Statut
     const statusProp = Object.keys(props).find(k => props[k].type === "status");
     if (statusProp) pageProps[statusProp] = { status: { name: "À faire" } };
 
-    // Texte enrichi pour le contenu
     const richTextProps = Object.keys(props).filter(k => props[k].type === "rich_text");
     pour (constante rtp de richTextProps) {
-      const rtLower = rtp.toLowerCase();
-      if (rtLower.includes("script") || rtLower.includes("contenu") || rtLower.includes("légende") || rtLower.includes("texte")) {
-        pageProps[rtp] = { rich_text: [{ text: { content: contenuComplet.substring(0, 2000) } }] };
+      const rtl = rtp.toLowerCase();
+      if (rtl.includes("script") || rtl.includes("contenu") || rtl.includes("légende") || rtl.includes("texte")) {
+        pageProps[rtp] = { rich_text: [{ text: { content: (hook + "\n\n" + legende).substring(0, 2000) } }] };
         casser;
       }
     }
 
-    // Créer la page dans Notion
     const createRes = await fetch("https://api.notion.com/v1/pages", {
       méthode : « POST »,
       en-têtes : {
@@ -181,82 +151,28 @@ app.post("/notion-add", async (req, res) => {
         parent : { database_id : dbId },
         propriétés : pageProps,
         enfants: [
-          {
-            objet : "bloc",
-            type: "heading_2",
-            heading_2: { rich_text: [{ text: { content: "🪝 Hook" } }] }
-          },
-          {
-            objet : "bloc",
-            type: "paragraphe",
-            paragraphe : { texte_riche : [{ texte : { contenu : hook || "" } }] }
-          },
-          {
-            objet : "bloc",
-            type: "heading_2",
-            heading_2: { rich_text: [{ text: { content: "✍️ Légende" } }] }
-          },
-          {
-            objet : "bloc",
-            type: "paragraphe",
-            paragraphe : { texte_riche : [{ texte : { contenu : (légende || "").substring(0, 2000) } }] }
-          },
-          {
-            objet : "bloc",
-            type: "heading_2",
-            heading_2: { rich_text: [{ text: { content: "#️⃣ Hashtags" } }] }
-          },
-          {
-            objet : "bloc",
-            type: "paragraphe",
-            paragraphe : { texte enrichi : [{ texte : { contenu : hashtagsStr } }] }
-          },
-          {
-            objet : "bloc",
-            type: "heading_2",
-            heading_2: { rich_text: [{ text: { content: "💬 Premier commentaire" } }] }
-          },
-          {
-            objet : "bloc",
-            type: "paragraphe",
-            paragraphe : { rich_text : [{ text : { content : premier_commentaire || "" } }] }
-          },
-          {
-            objet : "bloc",
-            type: "heading_2",
-            heading_2: { rich_text: [{ text: { content: "📲 Story J+1" } }] }
-          },
-          {
-            objet : "bloc",
-            type: "paragraphe",
-            paragraphe : { texte_riche : [{ texte : { contenu : story_relance || "" } }] }
-          },
-          {
-            objet : "bloc",
-            type: "heading_2",
-            heading_2: { rich_text: [{ text: { content: "🎨 Visuel Canva" } }] }
-          },
-          {
-            objet : "bloc",
-            type: "paragraphe",
-            paragraphe : { texte_riche : [{ texte : { contenu : conseil_visuel || "" } }] }
-          },
+          { object: "block", type: "heading_2", heading_2: { rich_text: [{ text: { content: "🪝 Hook" } }] } },
+          { objet : "bloc", type : "paragraphe", paragraphe : { texte enrichi : [{ texte : { contenu : crochet || "" } }] } },
+          { object: "block", type: "heading_2", heading_2: { rich_text: [{ text: { content: "✍️ Légende" } }] } },
+          { objet : "bloc", type : "paragraphe", paragraphe : { texte enrichi : [{ texte : { contenu : (légende || "").substring(0, 2000) } }] } },
+          { object: "block", type: "heading_2", heading_2: { rich_text: [{ text: { content: "#️⃣ Hashtags" } }] } },
+          { objet : "bloc", type : "paragraphe", paragraphe : { texte_enrichi : [{ texte : { contenu : hashtagsStr } }] } },
+          { object: "block", type: "heading_2", heading_2: { rich_text: [{ text: { content: "💬 Premier commentaire" } }] } },
+          { objet : "bloc", type : "paragraphe", paragraphe : { texte_riche : [{ texte : { contenu : premier_commentaire || "" } }] } },
+          { object: "block", type: "heading_2", heading_2: { rich_text: [{ text: { content: "📲 Story J+1" } }] } },
+          { objet : "bloc", type : "paragraphe", paragraphe : { texte_riche : [{ texte : { contenu : story_relance || "" } }] } },
+          { object: "block", type: "heading_2", heading_2: { rich_text: [{ text: { content: "🎨 Visuel Canva" } }] } },
+          { objet: "bloc", type: "paragraphe", paragraphe: { texte_riche: [{ texte: { contenu: conseil_visuel || "" } }] } },
         ]
       }),
     });
 
     const créé = await createRes.json();
-    si (created.object === "erreur") {
-      return res.status(400).json({ error: "Erreur création Notion : " +created.message });
-    }
-
+    if (created.object === "error") return res.status(400).json({ error: "Erreur création Notion : " + created.message });
     res.json({ success: true, notion_url: created.url, page_id: created.id });
   } attraper (erreur) {
     res.status(500).json({ error: "Erreur serveur Notion : " + err.message });
   }
 });
 
-app.get("/", (req, res) => res.send("Proxy Anthropic + Notion OK ✓"));
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Proxy lancé sur port " + PORT));
+module.exports = app;
